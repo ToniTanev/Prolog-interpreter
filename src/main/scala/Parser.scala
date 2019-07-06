@@ -1,4 +1,3 @@
-import java.io.File
 
 import scala.collection.mutable
 import scala.io.Source
@@ -6,9 +5,12 @@ import scala.io.Source
 
 
 case class Program(facts: List[Atom], rules: List[Rule]) {
-  def builtInAtomSymbols: List[String] = for( fact <- facts ) yield fact.identifier
+  def builtInAtomSymbols: List[String] = '='.toString :: ( for( fact <- facts ) yield fact.identifier )       //including "="
 
   def isBuiltInSymbol(symbol: String): Boolean = builtInAtomSymbols.contains(symbol)
+
+  //assumes it is buildIn symbol, we can have only one fact per symbol
+  def factForSymbol(symbol: String): Atom = facts.find(_.identifier == symbol).getOrElse(Atom("", List.empty))      //getOrElse will always produce a correct value so we don't care about the else part
 
   def rulesForAtom(currAtom: Atom): List[Rule] = rules.filter(_.resultAtom == currAtom)
 }
@@ -259,42 +261,47 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
       List[String]()
   }
 
-  def applyUnificationAlgorithm: State = {    //we assume all constraints are equations (algorithm without occurs check)
+  def applyUnificationAlgorithm: State = {    //we assume all constraints are equations (algorithm without occurs check); also queries are empty
 
-    constraints.filter { constraint => {            //filter out the trivial cases
-      val first  = constraint.terms.head
-      val second = constraint.terms.tail.head
-      (  !(Parser.isVariable(first) && Parser.isVariable(second) && (first equals second))            //second solving transform
-        && !(Parser.isConstant(first) && Parser.isConstant(second) && (first equals second)) )          //third trivial solving transform
-    }
-    }
-
-    val variablesForSubstitution = mutable.Queue[String]()
-
-    constraints.flatMap { constraint =>
-    {
-      val first  = constraint.terms.head
-      val second = constraint.terms.tail.head
-
-      if (Parser.isTerm(first) && Parser.isVariable(second))            //first solving transform
-        List( Atom('='.toString, List(second, first)) )
-      else if (Parser.isAtom(first) && Parser.isAtom(second))           //third non trivial transform
-        getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
-      else if (constraint.isSolving && isDuplicateVariable(first)) {    //fourth transform => mark variable for substitution and mark current equation not to be substituted
-        variablesForSubstitution.addOne(first)
-        List(Atom(constraint.identifier, constraint.terms, substitutable = false))
+    if(!isSolving && !isBad) {
+      constraints.filter { constraint => { //filter out the trivial cases
+        val first = constraint.terms.head
+        val second = constraint.terms.tail.head
+        (!(Parser.isVariable(first) && Parser.isVariable(second) && (first equals second)) //second solving transform
+          && !(Parser.isConstant(first) && Parser.isConstant(second) && (first equals second))) //third trivial solving transform
       }
-      else
-        List.empty
+      }
+
+      val variablesForSubstitution = mutable.Queue[String]()
+
+      constraints.flatMap { constraint => {
+        val first = constraint.terms.head
+        val second = constraint.terms.tail.head
+
+        if (Parser.isTerm(first) && Parser.isVariable(second)) //first solving transform
+          List(Atom('='.toString, List(second, first)))
+        else if (Parser.isAtom(first) && Parser.isAtom(second)) //third non trivial transform
+          getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
+        else if (constraint.isSolving && isDuplicateVariable(first)) { //fourth transform => mark variable for substitution and mark current equation not to be substituted
+          variablesForSubstitution.addOne(first)
+          List(Atom(constraint.identifier, constraint.terms, substitutable = false))
+        }
+        else
+          List.empty
+
+      }
+      }
+
+      this.substitute(basicSubstitution(variablesForSubstitution.toList)).applyUnificationAlgorithm     //apply unification algorithm while we can (while we haven't reached solving or bad state)
 
     }
-    }
 
-    this.substitute(basicSubstitution(variablesForSubstitution.toList))
+    else         //just do nothing
+      this
 
   }
 
-  implicit val basicSub = basicSubstitution( queries.head.getVariables )
+  implicit val basicSub: Map[String, String] = basicSubstitution( queries.head.getVariables )
 
   def substitute(implicit variablesSubstitution: Map[String, String]): State = {
     State( queries.map(_.substitute(variablesSubstitution)), constraints.map(_.substitute(variablesSubstitution)) )
@@ -304,11 +311,11 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
 
 def getAtomsComparing(a: Atom, b: Atom): List[Atom] = {      //f(x1,x2) = f(y5,c(10,arg2)) => List( =(x1,y5), =(x2,c(10,arg2)) )
 
-  if(a.identifier == b.identifier)
+  if(a.terms.nonEmpty && b.terms.nonEmpty && a.identifier == b.identifier)
   {
-    for {arg1 <- a.terms
-         arg2 <- b.terms
-    } yield Atom( '='.toString, List(arg1, arg2) )
+    val arg1 = a.terms.head
+    val arg2 = b.terms.head
+    Atom( '='.toString, List(arg1, arg2) ) :: getAtomsComparing(Atom(a.identifier, a.terms.tail), Atom(b.identifier, b.terms.tail))
   }
   else
     List[Atom]()
@@ -323,18 +330,30 @@ case class Solver(program: Program) {
 
   def solve(state: State, maxDepth: Int): Unit = {
     if(maxDepth > 0) {
+
       if (state.isSolving)
         resultSolutions.appendAll(state.getSolutions) //may fail appending, needs iterable
 
       else if (!state.isBad) {
 
-        if (program.isBuiltInSymbol(state.queries.head.identifier))
-          solve(State(state.queries.tail, state.queries.head :: state.constraints).applyUnificationAlgorithm, maxDepth - 1)
+        if(state.queries.isEmpty)       //apply unification algorithm
+          solve(state.applyUnificationAlgorithm, maxDepth - 1)
 
         else {
-          for {rule <- program.rulesForAtom(state.queries.head)} {
+          val currQuery = state.queries.head
 
-            solve(State(rule.inputAtoms ::: state.queries.tail, getAtomsComparing(state.queries.head, rule.resultAtom.substitute(basicSubstitution(rule.resultAtom.getVariables))) ::: state.constraints).applyUnificationAlgorithm, maxDepth - 1)
+          if (program.isBuiltInSymbol(currQuery.identifier)) {
+            val builtInFact = program.factForSymbol(currQuery.identifier)
+
+            solve(State(state.queries.tail, getAtomsComparing(currQuery, builtInFact) ::: state.constraints), maxDepth - 1)
+          }
+
+          else {
+            for {rule <- program.rulesForAtom(currQuery)} {
+              val substitutedResultAtom = rule.resultAtom.substitute( basicSubstitution(rule.resultAtom.getVariables))
+
+              solve(State(rule.inputAtoms ::: state.queries.tail, getAtomsComparing(currQuery, substitutedResultAtom ) ::: state.constraints), maxDepth - 1)
+            }
           }
         }
       }
