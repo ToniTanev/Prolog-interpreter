@@ -129,7 +129,11 @@ case class Atom(identifier: String, terms: List[String], substitutable: Boolean 
   }
 
   override def toString: String = {
-    identifier + '('.toString + terms.foldRight(')'.toString) {(x, y) => x + y}
+    identifier + '('.toString + terms.foldRight(')'.toString) { (x, y) => {
+      if (y != ")") x + "," + y
+      else          x + y
+    }
+    }
   }
 
   def getVariables: List[String] = {
@@ -447,4 +451,6 @@ object ParserTest extends App {
   val solver  = Solver(program, List("X"))
   solver.solve( State( List(Atom("p", List("a"))), List.empty), 2048 )
   solver.print()
+
+  println(Atom("atom", List("a(b(X),X)", "d(Y,e(Y))")).substitute(List("X"->"Y", "Y"->"Z").toMap))
 }
