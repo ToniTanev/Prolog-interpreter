@@ -57,4 +57,19 @@ object Utilities{
 
   }
 
+  def loadProgramFrom(str: String): Boolean = {
+    val parts = str.split(" ")
+
+    parts.length == 2 && parts(0) == "load"
+  }
+
+  def getProgramFileFrom(str: String): String = {
+    //assume we have correct input
+    str.split(" ")(1)
+  }
+
+  def getVariables(atoms: List[Atom]): List[String] = {
+    atoms.flatMap(_.getVariables)
+  }
+
 }

@@ -6,7 +6,7 @@ case class Solver(program: Program, variablesToFind: List[String]) {
 
 
   var hasSolution: Boolean = false
-  val resultSolutions: mutable.Queue[String] = mutable.Queue[String]()
+  val resultSolutions: mutable.Queue[Solution] = mutable.Queue.empty
 
 
   def solve(state: State, maxDepth: Int): Unit = {
@@ -14,7 +14,7 @@ case class Solver(program: Program, variablesToFind: List[String]) {
 
       if (state.isSolving) {
         hasSolution = true          //we've found at least one solution
-        resultSolutions.appendAll(state.getSolutions(variablesToFind)) //may fail appending, needs iterable
+        resultSolutions.append(Solution(variablesToFind, state.getSolutions(variablesToFind)))
       }
 
       else if (!state.isBad) {
@@ -58,13 +58,14 @@ case class Solver(program: Program, variablesToFind: List[String]) {
 
   }
 
-  def print(): Unit = {
+  def printSolutions(): Unit = {
     if (hasSolution) {
       println("Yes")
-      println(resultSolutions)
+      for {solution <- resultSolutions} solution.print()
     }
     else
       println("No")
   }
+
 
 }
