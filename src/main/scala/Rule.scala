@@ -7,6 +7,8 @@ case class Rule(resultAtom: Atom, inputAtoms: List[Atom]) {
       inputAtoms.map(currAtom => currAtom.substitute(variablesSubstitution)))
   }
 
+  def getVariables: List[String] = resultAtom.getVariables ::: inputAtoms.flatMap(_.getVariables)
+
 }
 
 case class RuleOps(str: String) {

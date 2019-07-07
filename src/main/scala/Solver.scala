@@ -36,9 +36,9 @@ case class Solver(program: Program, variablesToFind: List[String]) {
 
             if(program.rulesForAtom(currQuery).nonEmpty) {
               for {rule <- program.rulesForAtom(currQuery)} {
-                val substitutedResultAtom = rule.resultAtom.substitute(Utilities.basicSubstitution(rule.resultAtom.getVariables))
+                val substitutedRule = rule.substitute(Utilities.basicSubstitution(rule.getVariables))
 
-                solve(State(rule.inputAtoms ::: state.queries.tail, Utilities.getAtomsComparing(currQuery, substitutedResultAtom) ::: state.constraints), maxDepth - 1)
+                solve(State(substitutedRule.inputAtoms ::: state.queries.tail, Utilities.getAtomsComparing(currQuery, substitutedRule.resultAtom) ::: state.constraints), maxDepth - 1)
               }
             }
             else {
