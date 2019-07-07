@@ -228,13 +228,32 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
     queries.isEmpty && (constraints.isEmpty || (constraints.forall(_.isSolving) && !constraintsContainDuplicateVariables) )
   }
 
-  def getSolutions: List[String] = {        //only if it is solving
-    if (isSolving)
-      constraints.map {
-        case Atom("=", List(a, b), _ /* substitutable */) => a + '='.toString + b
+  def findSolutionForOneVariable(variable: String): String = {
+    if( isSolving )       //we're sure the variable is present in the equations only once; we assume the state is solving, but check anyway
+      {
+        val constraintContainingTheVariable = constraints.filter(_.terms.head == variable).head
+        val secondTerm                      = constraintContainingTheVariable.terms.tail.head         //the equation is: variable = secondTerm; so check secondTerm
+
+        if ( Parser.isVariable( secondTerm ) )
+          findSolutionForOneVariable( secondTerm )
+        else    //not a variable => directly return it as a result solution for the variable
+          secondTerm
       }
-    else
-      List[String]()
+    else    //should not get here
+      ""
+  }
+
+  def getSolutions(variablesToFind: List[String]): List[String] = {        //only if it is solving
+    if (isSolving) { //we assume the state is solving, but check anyway
+      if (variablesToFind.nonEmpty) {
+        findSolutionForOneVariable(variablesToFind.head) :: getSolutions(variablesToFind.tail)
+      }
+      else{
+        List.empty
+      }
+    }
+    else    //should not get here
+      List.empty
   }
 
   def getVariables: List[String] = queries.flatMap(_.getVariables) ::: constraints.flatMap(_.getVariables)
@@ -353,17 +372,20 @@ object Utilities{
 }
 
 
-case class Solver(program: Program) {
+case class Solver(program: Program, variablesToFind: List[String]) {
 
 
+  var hasSolution: Boolean = false
   val resultSolutions: mutable.Queue[String] = mutable.Queue[String]()
 
 
   def solve(state: State, maxDepth: Int): Unit = {
     if(maxDepth > 0) {
 
-      if (state.isSolving)
-        resultSolutions.appendAll(state.getSolutions) //may fail appending, needs iterable
+      if (state.isSolving) {
+        hasSolution = true          //we've found at least one solution
+        resultSolutions.appendAll(state.getSolutions(variablesToFind)) //may fail appending, needs iterable
+      }
 
       else if (!state.isBad) {
 
@@ -406,7 +428,14 @@ case class Solver(program: Program) {
 
   }
 
-  def print(): Unit = println(resultSolutions)
+  def print(): Unit = {
+    if (hasSolution) {
+      println("Yes")
+      println(resultSolutions)
+    }
+    else
+      println("No")
+  }
 
 }
 
@@ -415,7 +444,7 @@ object ParserTest extends App {
 
   val program = Parser.parse("factsAndRules.txt")     //in the "Prolog-interpreter" folder
 
-  val solver  = Solver(program)
+  val solver  = Solver(program, List("X"))
   solver.solve( State( List(Atom("p", List("a"))), List.empty), 2048 )
   solver.print()
 }
