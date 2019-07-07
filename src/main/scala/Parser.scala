@@ -254,7 +254,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
 
       val filteredState = State(List.empty, filteredConstraints)
 
-      val variablesForSubstitution = mutable.Queue[String]()
+      var substitutions = Map[String, String]()
 
       val newConstraints = filteredConstraints.flatMap { constraint => {
         val first = constraint.terms.head         //first term (arg)
@@ -267,7 +267,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
           Utilities.getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
 
         else if (Parser.isVariable(first) && Parser.isTerm(second) && filteredState.deleteConstraint(constraint).containsVariable(first) ) {                //fourth solving transform => mark variable for substitution and mark current equation not to be substituted
-          variablesForSubstitution.addOne(first)
+          substitutions += (first -> second)
           List(Atom(constraint.identifier, constraint.terms, substitutable = false))
         }
 
@@ -277,7 +277,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
       }
       }
 
-      State(List.empty, newConstraints).substitute(Utilities.basicSubstitution(variablesForSubstitution.toList)).applyUnificationAlgorithm     //apply unification algorithm while we can (while we haven't reached solving or bad state)
+      State(List.empty, newConstraints).substitute(substitutions).applyUnificationAlgorithm     //apply unification algorithm while we can (while we haven't reached solving or bad state)
 
     }
 
@@ -416,6 +416,6 @@ object ParserTest extends App {
   val program = Parser.parse("factsAndRules.txt")     //in the "Prolog-interpreter" folder
 
   val solver  = Solver(program)
-  solver.solve( State( List(Atom("hasCar", List("X"))), List.empty), 2048 )
+  solver.solve( State( List(Atom("p", List("a"))), List.empty), 2048 )
   solver.print()
 }
