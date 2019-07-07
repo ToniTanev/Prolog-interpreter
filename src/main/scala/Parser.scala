@@ -68,10 +68,60 @@ object Parser{    //white space sensitive
     }
   }
 
-  def isListOfAtoms(str: String): Boolean = {
-    val list = str.split(',').toList
+  def numBrackets(str: String): Int = {
+    str.count(_ == '(') - str.count(_ == ')')
+  }
 
-    list.count(x => isAtom(x)) == list.length
+  def areBracketsFineRec(str: String, cnt: Int): Boolean = {
+    if (cnt < 0)
+      false
+    else{
+      if(str.isEmpty){
+        cnt == 0
+      }
+      else{
+        if (str.head == '(')
+          areBracketsFineRec(str.tail, cnt + 1)
+        else if (str.head == ')')
+          areBracketsFineRec(str.tail, cnt - 1)
+        else
+          areBracketsFineRec(str.tail, cnt)
+      }
+    }
+  }
+
+  def areBracketsFine(str: String): Boolean = areBracketsFineRec(str, 0)
+
+  def splitIndex(str: String): Int = {          //splits to two parts, with the first being a potential atom; returns -1 if good split index isn't found
+
+    for (i <- 0 until str.length) {
+      val currChar = str.charAt(i)
+      val prefix = str.splitAt(i)._1
+
+      if (currChar == ',' && areBracketsFine(prefix) ) {
+        return i
+      }
+    }
+
+    -1
+  }
+
+  def splitToListOfAtoms(str: String): List[String] = {
+    val splitIdx = splitIndex(str)
+
+    if (splitIdx != -1) {
+      val parts = str.splitAt( splitIdx )
+
+      parts._1 :: splitToListOfAtoms(parts._2.tail /* don't include the comma */)
+    }
+    else
+      List(str)
+  }
+
+  def isListOfAtoms(str: String): Boolean = {
+    val list = splitToListOfAtoms(str)
+
+    list.nonEmpty /* require at least one atom */ && list.count(x => isAtom(x)) == list.length
   }
 
   def isRule(str: String): Boolean = {    //assuming not empty string
@@ -197,8 +247,8 @@ case class RuleOps(str: String) {
   def inputAtoms: List[Atom] = {
     val parts = str.split(":-")
 
-    parts(1).split(',').toList.
-      map(currAtomStr => AtomOps(currAtomStr).atom)
+    Parser.splitToListOfAtoms(parts(1)).map(currAtomStr => AtomOps(currAtomStr).atom)
+
   }
 
   def rule = Rule(resultAtom, inputAtoms)
