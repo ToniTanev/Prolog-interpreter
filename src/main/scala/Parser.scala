@@ -19,11 +19,17 @@ case class Program(facts: List[Atom], rules: List[Rule]) {
 object Parser{    //white space sensitive
 
   def isIdentifier(str: String): Boolean = {
-    str.head.isLetter && str.head.isLower && (str.tail.count(x => x.isLetter || x.isDigit) == str.tail.length)
+    if(str.nonEmpty)
+      str.head.isLetter && str.head.isLower && (str.tail.count(x => x.isLetter || x.isDigit) == str.tail.length)
+    else
+      false
   }
 
   def isVariable(str: String): Boolean = {
-    str.head.isLetter && str.head.isUpper && (str.tail.count(x => x.isLetter || x.isDigit) == str.tail.length)
+    if(str.nonEmpty)
+      str.head.isLetter && str.head.isUpper && (str.tail.count(x => x.isLetter || x.isDigit) == str.tail.length)
+    else
+      false
   }
 
   def isConstant(str: String): Boolean = {
@@ -449,7 +455,7 @@ object ParserTest extends App {
   val program = Parser.parse("factsAndRules.txt")     //in the "Prolog-interpreter" folder
 
   val solver  = Solver(program, List("X"))
-  solver.solve( State( List(Atom("p", List("a"))), List.empty), 2048 )
+  solver.solve( State( List(Atom("path", List("a","e"))), List.empty), 2048 )
   solver.print()
 
   println(Atom("atom", List("a(b(X),X)", "d(Y,e(Y))")).substitute(List("X"->"Y", "Y"->"Z").toMap))
