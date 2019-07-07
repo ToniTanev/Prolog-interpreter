@@ -12,7 +12,7 @@ case class Program(facts: List[Atom], rules: List[Rule]) {
   //assumes it is buildIn symbol, we can have only one fact per symbol
   def factForSymbol(symbol: String): Atom = facts.find(_.identifier == symbol).getOrElse(Atom("", List.empty))      //getOrElse will always produce a correct value so we don't care about the else part
 
-  def rulesForAtom(currAtom: Atom): List[Rule] = rules.filter(_.resultAtom == currAtom)
+  def rulesForAtom(currAtom: Atom): List[Rule] = rules.filter(_.resultAtom.identifier == currAtom.identifier)
 }
 
 
@@ -39,7 +39,7 @@ object Parser{    //white space sensitive
   def isTerm(str: String): Boolean = {
     isConstant(str) || isVariable(str) || {
 
-      val firstBracketInx = str.indexWhere(_ equals '(')
+      val firstBracketInx = str.indexWhere(_ == '(')
       val lastBracketInx = str.length - 1
 
       val name = str.slice(0, firstBracketInx)
@@ -105,22 +105,6 @@ object Parser{    //white space sensitive
 }
 
 
-def areBadTerms(a: String, b: String): Boolean = {          //bad code design, but readably shows when terms are bad for '='
-  if (Parser.isConstant(a) && Parser.isConstant(b) && !( a equals b ) )
-    true
-  else if ( (Parser.isAtom(a) && Parser.isConstant(b))
-    || (Parser.isConstant(a) && Parser.isAtom(b)) )
-    true
-  else if ( Parser.isAtom(a) && Parser.isAtom(b) &&
-    (!( AtomOps(a).atom.identifier equals AtomOps(b).atom.identifier )          //either names are not the same
-      || ( AtomOps(a).atom.terms.length != AtomOps(b).atom.terms.length) ) )       //or number of terms are different
-    true
-  else
-    false
-
-}
-
-
 case class Atom(identifier: String, terms: List[String], substitutable: Boolean = true) {
 
   def == (other: Atom): Boolean = {
@@ -131,17 +115,17 @@ case class Atom(identifier: String, terms: List[String], substitutable: Boolean 
 
   def substitute(variablesSubstitution: Map[String, String]): Atom = {
     if (substitutable)
-      Atom( identifier, terms.map(currTerm => substituteTerm(currTerm, variablesSubstitution)) )
+      Atom( identifier, terms.map(currTerm => Utilities.substituteTerm(currTerm, variablesSubstitution)) )
     else
       this
   }
 
   def isBad: Boolean = {
-    terms.length == 2 && identifier.equals( '='.toString ) && areBadTerms(terms.head, terms.tail.head)
+    terms.length == 2 && identifier == '='.toString && Utilities.areBadTerms(terms.head, terms.tail.head)
   }
 
   def isSolving: Boolean = {        //not the standard definition for solving equation(atom), which requires the variable not to be in any other equation as well
-    terms.length == 2 && identifier.equals( '='.toString ) && Parser.isVariable(terms.head) && Parser.isTerm(terms.tail.head)
+    terms.length == 2 && identifier == '='.toString && Parser.isVariable(terms.head) && Parser.isTerm(terms.tail.head)
   }
 
   override def toString: String = {
@@ -164,13 +148,13 @@ case class Atom(identifier: String, terms: List[String], substitutable: Boolean 
 case class AtomOps(str: String) {      //Atom == Predicate
 
   def identifier: String = {
-    val firstBracketInx = str.indexWhere(_ equals '(')
+    val firstBracketInx = str.indexWhere(_ == '(')
 
     str.slice(0, firstBracketInx)
   }
 
   def terms : List[String] = {
-    val firstBracketInx = str.indexWhere(_ equals '(')
+    val firstBracketInx = str.indexWhere(_ == '(')
     val lastBracketInx = str.length - 1
 
     val arguments = str.slice(firstBracketInx + 1, lastBracketInx)   //without including the brackets
@@ -185,7 +169,7 @@ case class AtomOps(str: String) {      //Atom == Predicate
 
 case class Rule(resultAtom: Atom, inputAtoms: List[Atom]) {
 
-  def substitute(variablesSubstitution: Map[String, String]) = {
+  def substitute(variablesSubstitution: Map[String, String]): Rule = {
     Rule(resultAtom.substitute(variablesSubstitution),
       inputAtoms.map(currAtom => currAtom.substitute(variablesSubstitution)))
   }
@@ -212,28 +196,6 @@ case class RuleOps(str: String) {
 }
 
 
-def basicSubstitution(variables: List[String]): Map[String, String] = {       //adds "1" to the variable name (i.e. x1 => x11)
-  List( (variables.head, variables.head + 1.toString) ).toMap ++ basicSubstitution(variables.tail)
-}
-
-def substituteTerm(term: String, variableSubstitutions: Map[String, String]): String = {
-  /*if(variables.isEmpty || substitutions.isEmpty || variables.length != substitutions.length)
-    term
-  else
-    substituteTerm(term.replaceAll(variables.head, substitutions.head), variables.tail, substitutions.tail)*/
-
-  if (Parser.isVariable(term))
-    variableSubstitutions(term)
-
-  else if(Parser.isAtom(term)){
-    AtomOps(term).atom.substitute(variableSubstitutions).toString
-  }
-
-  else    //term is constant => do nothing, just return the term itself
-    term
-
-}
-
 case class State(queries: List[Atom], constraints: List[Atom]) {
 
   def constraintsContainDuplicateVariables: Boolean = {
@@ -247,7 +209,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
   def isDuplicateVariable(x: String): Boolean = {
     val variablesInEquations = constraints.filter(_.isSolving).map(_.terms.head)
 
-    variablesInEquations.count(_ equals x) > 1
+    variablesInEquations.count(_ == x) > 1
   }
 
   def deleteConstraint( constraint: Atom ): State = {
@@ -263,7 +225,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
   }
 
   def isSolving: Boolean = {
-    queries.isEmpty && constraints.forall(_.isSolving) && !constraintsContainDuplicateVariables
+    queries.isEmpty && (constraints.isEmpty || (constraints.forall(_.isSolving) && !constraintsContainDuplicateVariables) )
   }
 
   def getSolutions: List[String] = {        //only if it is solving
@@ -282,38 +244,40 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
   def applyUnificationAlgorithm: State = {    //we assume all constraints are equations (algorithm without occurs check); also assume queries are empty
 
     if(!isSolving && !isBad) {
-      constraints.filter { constraint => { //filter out the trivial cases
+      val filteredConstraints = constraints.filter { constraint => {                            //filter out the trivial cases
         val first = constraint.terms.head
         val second = constraint.terms.tail.head
-        (!(Parser.isVariable(first) && Parser.isVariable(second) && (first equals second))        //second solving transform
-          && !(Parser.isConstant(first) && Parser.isConstant(second) && (first equals second)))   //third trivial solving transform
+          !(Parser.isVariable(first) && Parser.isVariable(second) && (first == second)) &&      //second solving transform
+          !(Parser.isConstant(first) && Parser.isConstant(second) && (first == second))         //third trivial solving transform
+        }
       }
-      }
+
+      val filteredState = State(List.empty, filteredConstraints)
 
       val variablesForSubstitution = mutable.Queue[String]()
 
-      constraints.flatMap { constraint => {
-        val first = constraint.terms.head
-        val second = constraint.terms.tail.head
+      val newConstraints = filteredConstraints.flatMap { constraint => {
+        val first = constraint.terms.head         //first term (arg)
+        val second = constraint.terms.tail.head   //second term (arg)
 
-        if (Parser.isTerm(first) && Parser.isVariable(second))                        //first solving transform
+        if (Parser.isTerm(first) && !Parser.isVariable(first) && Parser.isVariable(second))                        //first solving transform
           List(Atom('='.toString, List(second, first)))
 
         else if (Parser.isAtom(first) && Parser.isAtom(second))                       //third non trivial solving transform
-          getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
+          Utilities.getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
 
-        else if (constraint.isSolving && this.deleteConstraint(constraint).containsVariable(first) ) {                //fourth solving transform => mark variable for substitution and mark current equation not to be substituted
+        else if (Parser.isVariable(first) && Parser.isTerm(second) && filteredState.deleteConstraint(constraint).containsVariable(first) ) {                //fourth solving transform => mark variable for substitution and mark current equation not to be substituted
           variablesForSubstitution.addOne(first)
           List(Atom(constraint.identifier, constraint.terms, substitutable = false))
         }
 
         else
-          List.empty
+          List(constraint)
 
       }
       }
 
-      this.substitute(basicSubstitution(variablesForSubstitution.toList)).applyUnificationAlgorithm     //apply unification algorithm while we can (while we haven't reached solving or bad state)
+      State(List.empty, newConstraints).substitute(Utilities.basicSubstitution(variablesForSubstitution.toList)).applyUnificationAlgorithm     //apply unification algorithm while we can (while we haven't reached solving or bad state)
 
     }
 
@@ -322,31 +286,77 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
 
   }
 
-  implicit val basicSub: Map[String, String] = basicSubstitution( queries.head.getVariables )
-
   def substitute(implicit variablesSubstitution: Map[String, String]): State = {
     State( queries.map(_.substitute(variablesSubstitution)), constraints.map(_.substitute(variablesSubstitution)) )
   }
 
 }
 
-def getAtomsComparing(a: Atom, b: Atom): List[Atom] = {      //f(x1,x2) = f(y5,c(10,arg2)) => List( =(x1,y5), =(x2,c(10,arg2)) )
 
-  if(a.terms.nonEmpty && b.terms.nonEmpty && a.identifier == b.identifier)
-  {
-    val arg1 = a.terms.head
-    val arg2 = b.terms.head
-    Atom( '='.toString, List(arg1, arg2) ) :: getAtomsComparing(Atom(a.identifier, a.terms.tail), Atom(b.identifier, b.terms.tail))
+object Utilities{
+
+  def getAtomsComparing(a: Atom, b: Atom): List[Atom] = {      //f(x1,x2) = f(y5,c(10,arg2)) => List( =(x1,y5), =(x2,c(10,arg2)) )
+
+    if(a.terms.nonEmpty && b.terms.nonEmpty && a.identifier == b.identifier)
+    {
+      val arg1 = a.terms.head
+      val arg2 = b.terms.head
+      Atom( '='.toString, List(arg1, arg2) ) :: getAtomsComparing(Atom(a.identifier, a.terms.tail), Atom(b.identifier, b.terms.tail))
+    }
+    else
+      List.empty
+
   }
-  else
-    List.empty
+
+  def areBadTerms(a: String, b: String): Boolean = {          //bad code design, but readably shows when terms are bad for '='
+    if (Parser.isConstant(a) && Parser.isConstant(b) && !( a == b ) )
+      true
+    else if ( (Parser.isAtom(a) && Parser.isConstant(b))
+      || (Parser.isConstant(a) && Parser.isAtom(b)) )
+      true
+    else if ( Parser.isAtom(a) && Parser.isAtom(b) &&
+      (!( AtomOps(a).atom.identifier == AtomOps(b).atom.identifier )          //either names are not the same
+        || ( AtomOps(a).atom.terms.length != AtomOps(b).atom.terms.length) ) )       //or number of terms are different
+      true
+    else
+      false
+
+  }
+
+
+  def basicSubstitution(variables: List[String]): Map[String, String] = {       //adds "1" to the variable name (i.e. x1 => x11)
+
+    if(variables.nonEmpty)
+      List( (variables.head, variables.head + 1.toString) ).toMap ++ basicSubstitution(variables.tail)
+    else
+      Map.empty
+  }
+
+  def substituteTerm(term: String, variableSubstitutions: Map[String, String]): String = {
+    /*if(variables.isEmpty || substitutions.isEmpty || variables.length != substitutions.length)
+      term
+    else
+      substituteTerm(term.replaceAll(variables.head, substitutions.head), variables.tail, substitutions.tail)*/
+
+    if (Parser.isVariable(term) && variableSubstitutions.contains(term))
+      variableSubstitutions(term)
+
+    else if(Parser.isAtom(term)){
+      AtomOps(term).atom.substitute(variableSubstitutions).toString
+    }
+
+    else    //term is constant => do nothing, just return the term itself
+      term
+
+  }
 
 }
+
 
 case class Solver(program: Program) {
 
 
-  val resultSolutions = mutable.Queue[String]()
+  val resultSolutions: mutable.Queue[String] = mutable.Queue[String]()
 
 
   def solve(state: State, maxDepth: Int): Unit = {
@@ -366,16 +376,16 @@ case class Solver(program: Program) {
           if (program.isBuiltInSymbol(currQuery.identifier)) {
             val builtInFact = program.factForSymbol(currQuery.identifier)
 
-            solve(State(state.queries.tail, getAtomsComparing(currQuery, builtInFact) ::: state.constraints), maxDepth - 1)
+            solve(State(state.queries.tail, Utilities.getAtomsComparing(currQuery, builtInFact) ::: state.constraints), maxDepth - 1)
           }
 
           else {
 
             if(program.rulesForAtom(currQuery).nonEmpty) {
               for {rule <- program.rulesForAtom(currQuery)} {
-                val substitutedResultAtom = rule.resultAtom.substitute(basicSubstitution(rule.resultAtom.getVariables))
+                val substitutedResultAtom = rule.resultAtom.substitute(Utilities.basicSubstitution(rule.resultAtom.getVariables))
 
-                solve(State(rule.inputAtoms ::: state.queries.tail, getAtomsComparing(currQuery, substitutedResultAtom) ::: state.constraints), maxDepth - 1)
+                solve(State(rule.inputAtoms ::: state.queries.tail, Utilities.getAtomsComparing(currQuery, substitutedResultAtom) ::: state.constraints), maxDepth - 1)
               }
             }
             else {
@@ -396,12 +406,16 @@ case class Solver(program: Program) {
 
   }
 
+  def print(): Unit = println(resultSolutions)
+
 }
 
 object ParserTest extends App {
-  //val currDir = new File(".").getAbsolutePath()
+  //val currDir = new File(".").getAbsolutePath()               //to see where the pl files should be (facts and rules files)
 
-  val program = Parser.parse("factsAndRules.txt")     //in the "Prolog interpreter" folder
+  val program = Parser.parse("factsAndRules.txt")     //in the "Prolog-interpreter" folder
 
-  println(program)
+  val solver  = Solver(program)
+  solver.solve( State( List(Atom("hasCar", List("X"))), List.empty), 2048 )
+  solver.print()
 }
