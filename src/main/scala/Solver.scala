@@ -26,9 +26,10 @@ case class Solver(program: Program, variablesToFind: List[String]) {
           val currQuery = state.queries.head
 
           if (program.isBuiltInSymbol(currQuery.identifier)) {
-            val builtInFact = program.factForSymbol(currQuery.identifier)
+            for { fact <- program.factsForSymbol(currQuery.identifier) } {
 
-            solve(State(state.queries.tail, Utilities.getAtomsComparing(currQuery, builtInFact) ::: state.constraints), maxDepth - 1)
+              solve(State(state.queries.tail, Utilities.getAtomsComparing(currQuery, fact) ::: state.constraints), maxDepth - 1)
+            }
           }
 
           else {

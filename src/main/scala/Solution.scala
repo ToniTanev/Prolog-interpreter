@@ -15,5 +15,5 @@ case class Solution(variables: List[String], values: List[String]) {  //assume t
 
   def printString: String = printStringRec(this.variables, this.values)
 
-  def print(): Unit = println(printString)
+  def print(): Unit = if (printString.nonEmpty) println(printString)
 }
