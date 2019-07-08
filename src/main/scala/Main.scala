@@ -1,4 +1,6 @@
 
+import java.nio.file.{Files, Paths}
+
 import scala.io.StdIn
 
 
@@ -13,9 +15,16 @@ object Main extends App {
 
     if(Utilities.loadProgramFrom(line)) {
       programFile = Utilities.getProgramFileFrom(line)
-      program     = Parser.parse(programFile)
 
-      println("loaded " + programFile)
+      if (Files.exists(Paths.get(programFile))) {
+        program = Parser.parse(programFile)
+
+        println("loaded " + programFile)
+      }
+      else{
+        println("file not found")
+      }
+
     }
 
     else if(Parser.isListOfAtoms(line)){
