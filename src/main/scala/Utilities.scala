@@ -2,6 +2,13 @@
 
 object Utilities{
 
+  var currNumber: Long = 0
+
+  def nextNumber: Long = {
+    currNumber = currNumber + 1
+    currNumber
+  }
+
   def getAtomsComparing(a: Atom, b: Atom): List[Atom] = {      //f(x1,x2) = f(y5,c(10,arg2)) => List( =(x1,y5), =(x2,c(10,arg2)) )
 
     if(a.terms.nonEmpty && b.terms.nonEmpty && a.identifier == b.identifier)
@@ -34,7 +41,7 @@ object Utilities{
   def basicSubstitution(variables: List[String]): Map[String, String] = {       //adds "1" to the variable name (i.e. x1 => x11)
 
     if(variables.nonEmpty)
-      List( (variables.head, variables.head + 1.toString) ).toMap ++ basicSubstitution(variables.tail)
+      List( (variables.head, "XX" + nextNumber.toString) ).toMap ++ basicSubstitution(variables.tail)
     else
       Map.empty
   }
