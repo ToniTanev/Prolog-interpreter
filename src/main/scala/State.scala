@@ -25,7 +25,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
   }
 
   def isBad: Boolean = {                                                  //dead end state, it cannot be continued
-    constraints.exists(_.isBad) || constraintsContainDuplicateVariables   //contains a bad equation or has duplicate variables
+    constraints.exists(_.isBad) /*|| constraintsContainDuplicateVariables*/   //contains a bad equation or has duplicate variables
   }
 
   def isSolving: Boolean = {
@@ -66,7 +66,7 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
 
   def applyUnificationAlgorithm: State = {    //we assume all constraints are equations (algorithm without occurs check); also assume queries are empty
 
-    if(!isSolving && !isBad) {
+    /*if(!isSolving && !isBad) {
       val filteredConstraints = constraints.filter { constraint => {                            //filter out the trivial cases
         val first = constraint.terms.head
         val second = constraint.terms.tail.head
@@ -105,7 +105,62 @@ case class State(queries: List[Atom], constraints: List[Atom]) {
     }
 
     else         //just do nothing
-      this
+      this*/
+
+    var state          = this
+
+    var newConstraints = constraints
+
+    var i              = 0
+
+    while (!state.isSolving && !state.isBad) {
+      val currConstraint = newConstraints(i)
+
+      val first = currConstraint.terms.head
+      val second = currConstraint.terms.tail.head
+
+      if((Parser.isVariable(first) && Parser.isVariable(second) && (first == second)) ||      //second solving transform
+         (Parser.isConstant(first) && Parser.isConstant(second) && (first == second)) ){
+        newConstraints = newConstraints.patch(i, Nil, 1)
+
+        //i = i
+      }
+
+      else if (Parser.isTerm(first) && !Parser.isVariable(first) && Parser.isVariable(second)) {        //first solving transform
+        newConstraints = newConstraints.patch(i, List(Atom('='.toString, List(second, first))), 1)
+
+        i = i + 1
+      }
+
+      else if (Parser.isAtom(first) && Parser.isAtom(second) && AtomOps(first).atom.identifier == AtomOps(second).atom.identifier &&
+        AtomOps(first).atom.terms.length == AtomOps(second).atom.terms.length){                       //third non trivial solving transform
+
+        val newAtoms   = Utilities.getAtomsComparing(AtomOps(first).atom, AtomOps(second).atom)
+        newConstraints = newConstraints.patch(i, newAtoms, 1)
+
+        i = i + newAtoms.length
+      }
+
+      else if (Parser.isVariable(first) && Parser.isTerm(second) && State(List.empty, newConstraints).deleteConstraint(currConstraint).containsVariable(first) ) {                //fourth solving transform => mark variable for substitution and mark current equation not to be substituted
+        val substitution = List(first -> second).toMap
+        val newState     = State(List.empty, newConstraints).deleteConstraint(currConstraint).substitute(substitution)      //remove constraint and substitute others
+        newConstraints   = newState.constraints.patch(i, List(currConstraint), 0)   //put constraint back at its place
+
+        i = i + 1
+      }
+
+      else {
+        //leave currConstraint as it is, move to next constraing
+        i = i + 1
+      }
+
+      state = State(List.empty, newConstraints)
+
+      if(newConstraints.nonEmpty)
+        i = i % newConstraints.length
+    }
+
+    state
 
   }
 

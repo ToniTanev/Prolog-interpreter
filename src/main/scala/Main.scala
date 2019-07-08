@@ -32,7 +32,7 @@ object Main extends App {
       val variables = Utilities.getVariables(queries)
       val solver    = Solver(program, variables)
 
-      solver.solve(State(queries, List.empty), 1024 /* max depth */)
+      solver.solve(State(queries, List.empty), 10 /* max depth */)
       solver.printSolutions()
     }
 
